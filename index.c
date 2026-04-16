@@ -180,11 +180,37 @@ int index_load(Index *index) {
 //
 // Returns 0 on success, -1 on error.
 int index_save(const Index *index) {
-    // TODO: Implement atomic index saving
-    // (See Lab Appendix for logical steps)
-    (void)index;
-    return -1;
+
+    // Create a sorted copy
+    Index temp = *index;
+    qsort(temp.entries, temp.count, sizeof(IndexEntry), compare_entries);
+
+    FILE *f = fopen(".pes/index.tmp", "w");
+    if (!f) return -1;
+
+    for (int i = 0; i < temp.count; i++) {
+        char hex[HASH_HEX_SIZE + 1];
+        hash_to_hex(&temp.entries[i].hash, hex);
+
+        fprintf(f, "%o %s %ld %u %s\n",
+                temp.entries[i].mode,
+                hex,
+                temp.entries[i].mtime_sec,
+                temp.entries[i].size,
+                temp.entries[i].path);
+    }
+
+    fflush(f);
+    fsync(fileno(f));
+    fclose(f);
+
+    // Atomic rename
+    if (rename(".pes/index.tmp", ".pes/index") != 0)
+        return -1;
+
+    return 0;
 }
+
 
 // Stage a file for the next commit.
 //
