@@ -135,3 +135,88 @@ typedef struct {
     ObjectID hash;
     char path[256];
 } TempEntry;
+
+static int build_tree_level(TempEntry *entries, int count, const char *prefix, ObjectID *id_out)
+{
+    Tree tree;
+    tree.count = 0;
+    for (int i = 0; i < count; i++) {
+
+        const char *rel = entries[i].path;
+
+        if (prefix && strncmp(rel, prefix, strlen(prefix)) != 0)
+            continue;
+
+        const char *name = prefix ? rel + strlen(prefix) : rel;
+
+        if (strchr(name, '/') != NULL)
+            continue;
+
+        TreeEntry *t = &tree.entries[tree.count++];
+
+        t->mode = entries[i].mode;
+        strcpy(t->name, name);
+        t->hash = entries[i].hash;
+    }
+    for (int i = 0; i < count; i++) {
+
+        const char *rel = entries[i].path;
+
+        if (prefix && strncmp(rel, prefix, strlen(prefix)) != 0)
+            continue;
+
+        const char *name = prefix ? rel + strlen(prefix) : rel;
+
+        char *slash = strchr(name, '/');
+        if (!slash)
+            continue;
+
+        char dirname[256];
+        strncpy(dirname, name, slash - name);
+        dirname[slash - name] = '\0';
+
+        int exists = 0;
+        for (int j = 0; j < tree.count; j++)
+            if (strcmp(tree.entries[j].name, dirname) == 0)
+                exists = 1;
+
+        if (exists)
+            continue;
+
+        char new_prefix[256];
+    if (snprintf(new_prefix,
+                sizeof(new_prefix),
+                "%s%s/",
+                prefix ? prefix : "",
+                dirname) >= (int)sizeof(new_prefix)) {
+        return -1;
+    }
+new_prefix[sizeof(new_prefix) - 1] = '\0';
+
+        ObjectID sub_id;
+
+        if (build_tree_level(entries, count,
+                            new_prefix,
+                            &sub_id) != 0)
+            return -1;
+
+        TreeEntry *t = &tree.entries[tree.count++];
+
+        t->mode = MODE_DIR;
+        strcpy(t->name, dirname);
+        t->hash = sub_id;
+    }
+    void *data;
+    size_t len;
+
+    if (tree_serialize(&tree, &data, &len) != 0)
+        return -1;
+
+    if (object_write(OBJ_TREE, data, len, id_out) != 0) {
+        free(data);
+        return -1;
+    }
+
+    free(data);
+    return 0;
+}
