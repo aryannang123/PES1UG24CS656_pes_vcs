@@ -168,3 +168,59 @@ int head_update(const ObjectID *new_commit) {
 
     return rename(tmp_path, target_path);
 }
+
+int commit_create(const char *message, ObjectID *commit_id_out) {
+    
+    if (!message || strlen(message) == 0)
+        return -1;
+
+    ObjectID tree_id;
+
+    if (tree_from_index(&tree_id) != 0)
+        return -1;
+    
+    Commit commit;
+    memset(&commit, 0, sizeof(commit));
+
+    commit.tree = tree_id;
+
+    ObjectID parent;
+
+    if (head_read(&parent) == 0)
+    {
+        commit.parent = parent;
+        commit.has_parent = 1;
+    }
+    else
+    {
+        commit.has_parent = 0;
+    }
+
+    snprintf(commit.author,sizeof(commit.author),"%s", pes_author());
+
+    commit.timestamp = (uint64_t)time(NULL);
+
+    snprintf(commit.message, sizeof(commit.message), "%s",message);
+
+    void *data;
+    size_t len;
+
+    if (commit_serialize(&commit, &data, &len) != 0)
+        return -1;
+
+    if (object_write(OBJ_COMMIT, data, len, commit_id_out) != 0)
+    {
+        free(data);
+        return -1;
+    }
+
+    free(data);
+
+    (void)message;
+    (void)commit_id_out;
+
+    if (head_update(commit_id_out) != 0)
+        return -1;
+
+    return 0;
+}
