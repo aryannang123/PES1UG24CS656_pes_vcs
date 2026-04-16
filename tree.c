@@ -243,5 +243,7 @@ int tree_from_index(ObjectID *id_out) {
             count++;
         }
     }
+    fclose(fp);
+    return build_tree_level(entries, count, NULL, id_out);
 
 }
