@@ -130,79 +130,8 @@ int tree_serialize(const Tree *tree, void **data_out, size_t *len_out) {
 //
 // Returns 0 on success, -1 on error.
 // Forward declarations
-int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out);
-
-// Helper: write one level of the tree for entries whose paths share the given prefix.
-// prefix = "" means root, prefix = "src" means src/ subtree.
-static int write_tree_level(IndexEntry *entries, int count,
-                             const char *prefix, ObjectID *id_out) {
-    Tree tree;
-    tree.count = 0;
-
-    int i = 0;
-    while (i < count) {
-        const char *rel = entries[i].path; // full path
-        // Skip the prefix portion
-        size_t prefix_len = strlen(prefix);
-        if (prefix_len > 0) {
-            if (strncmp(rel, prefix, prefix_len) != 0 || rel[prefix_len] != '/') {
-                i++; continue;
-            }
-            rel = rel + prefix_len + 1; // skip "prefix/"
-        }
-
-        // Check if there's another '/' — means it's a subdirectory
-        const char *slash = strchr(rel, '/');
-        if (slash) {
-            // It's a sub-entry: build the immediate directory name
-            size_t dir_len = (size_t)(slash - rel);
-            char dir_name[256];
-            memcpy(dir_name, rel, dir_len);
-            dir_name[dir_len] = '\0';
-
-            // Collect ALL entries belonging to this subdir
-            char sub_prefix[512];
-            if (prefix_len > 0)
-                snprintf(sub_prefix, sizeof(sub_prefix), "%s/%s", prefix, dir_name);
-            else
-                snprintf(sub_prefix, sizeof(sub_prefix), "%s", dir_name);
-
-            // Check we haven't already added this dir
-            int already = 0;
-            for (int k = 0; k < tree.count; k++) {
-                if (strcmp(tree.entries[k].name, dir_name) == 0) { already = 1; break; }
-            }
-            if (!already) {
-                ObjectID sub_id;
-                if (write_tree_level(entries, count, sub_prefix, &sub_id) != 0) return -1;
-                TreeEntry *e = &tree.entries[tree.count++];
-                e->mode = 0040000;
-                e->hash = sub_id;
-                snprintf(e->name, sizeof(e->name), "%s", dir_name);
-            }
-            i++;
-        } else {
-            // It's a plain file at this level
-            TreeEntry *e = &tree.entries[tree.count++];
-            e->mode = entries[i].mode;
-            e->hash = entries[i].hash;
-            snprintf(e->name, sizeof(e->name), "%s", rel);
-            i++;
-        }
-    }
-
-    // Serialize and write
-    void *data;
-    size_t data_len;
-    if (tree_serialize(&tree, &data, &data_len) != 0) return -1;
-    int rc = object_write(OBJ_TREE, data, data_len, id_out);
-    free(data);
-    return rc;
-}
-
-int tree_from_index(ObjectID *id_out) {
-    Index index;
-    if (index_load(&index) != 0) return -1;
-    if (index.count == 0) return -1; // nothing staged
-    return write_tree_level(index.entries, index.count, "", id_out);
-}
+typedef struct {
+    uint32_t mode;
+    ObjectID hash;
+    char path[256];
+} TempEntry;
