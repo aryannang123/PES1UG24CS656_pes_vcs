@@ -220,3 +220,28 @@ new_prefix[sizeof(new_prefix) - 1] = '\0';
     free(data);
     return 0;
 }
+int tree_from_index(ObjectID *id_out) {
+    FILE *fp = fopen(".pes/index", "r");
+    if (!fp) return -1;
+
+    TempEntry entries[256];
+    int count = 0;
+
+    while (!feof(fp)) {
+        char hash_hex[HASH_HEX_SIZE + 1];
+        long mtime;
+        size_t size;
+
+        if (fscanf(fp, "%o %64s %ld %zu %255s\n",
+                &entries[count].mode,
+                hash_hex,
+                &mtime,
+                &size,
+                entries[count].path) == 5) {
+
+            hex_to_hash(hash_hex, &entries[count].hash);
+            count++;
+        }
+    }
+
+}
